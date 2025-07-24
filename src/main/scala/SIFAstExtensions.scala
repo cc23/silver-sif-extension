@@ -7,9 +7,9 @@
 package viper.silver.sif
 
 
-import viper.silver.ast.pretty.PrettyPrintPrimitives
-import viper.silver.ast.pretty.FastPrettyPrinter.{ContOps, nil, parens, show, showBlock, text}
 import viper.silver.ast._
+import viper.silver.ast.pretty.FastPrettyPrinter.{ContOps, nil, parens, show, showBlock, text}
+import viper.silver.ast.pretty.PrettyPrintPrimitives
 import viper.silver.verifier.{ConsistencyError, Failure, VerificationResult}
 
 case class SIFReturnStmt(exp: Option[Exp], resVar: Option[LocalVar])
@@ -215,6 +215,28 @@ case class SIFTerminatesExp(cond: Exp)(val pos: Position = NoPosition,
     text("terminates under condition") <+> show(cond)
 
   override def extensionIsPure: Boolean = cond.isPure
+}
+
+case class SIFSplitInvariant(inv: Exp,
+                             receiver: Exp,
+                             repl: Seq[(Field, Exp, Exp)]
+                            )(val pos: Position = NoPosition,
+                              val info: Info = NoInfo,
+                              val errT: ErrorTrafo = NoTrafos) extends ExtensionExp {
+  override def extensionSubnodes: Seq[Node] =
+    Seq(inv, receiver) ++ repl.flatMap(t => Seq(t._1, t._2, t._3))
+
+  override def typ: Type = Bool
+
+  override def verifyExtExp(): VerificationResult = {
+    assert(assertion = false, "SIFSplitInvariant: verifyExtExp has not been implemented.")
+    Failure(Seq(ConsistencyError("SIFSplitInvariant: verifyExtExp has not been implemented.", pos)))
+  }
+
+  override def prettyPrint: PrettyPrintPrimitives#Cont =
+    text("splitInv") <+> parens(show(inv)) <+> parens(show(receiver) <+> text(", somerepl") )
+
+  override def extensionIsPure: Boolean = inv.isPure
 }
 
 case class SIFInfo(comment: Seq[String],

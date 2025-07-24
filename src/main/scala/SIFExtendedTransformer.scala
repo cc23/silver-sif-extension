@@ -1397,6 +1397,8 @@ trait SIFExtendedTransformer {
               )(l.pos, l.info, errT = fwTs(l, l))
             }
         }
+      case s @ SIFSplitInvariant(inv, rec, repl) => translateSplitInv(inv, rec, repl, ctx, relAssertCtx)
+
       // for the domain method low, used e.g. for list resource
       case f@DomainFuncApp("Low", args, _) => translateSIFAss(
         SIFLowExp(args.head, None)(f.pos, f.info, f.errT), ctx, relAssertCtx)
@@ -1433,6 +1435,68 @@ trait SIFExtendedTransformer {
         e.pos, e.info, e.errT)
       case _: SIFTerminatesExp => TrueLit()()
       case _ => translateAssDefault(e, p1, p2)
+    }
+  }
+
+  private def translateSplitInv(inv: Exp, rec: Exp, repl: Seq[(Field, Exp, Exp)], ctx: TranslationContext, relAssertCtx: TranslationContext): Exp = {
+    val relCtx = if (relAssertCtx == null) ctx else relAssertCtx
+    val x = (translateNormal(rec, relCtx.p1, relCtx.p2), translatePrime(rec, relCtx.p1, relCtx.p2))
+    val thisExp: Option[(Exp, Exp)] = inv.collectFirst {
+      case FieldAccess(recv, _) if !recv.isInstanceOf[FieldAccess] => recv
+    }
+      .map(t => (translateNormal(t, relCtx.p1, relCtx.p2), translatePrime(t, relCtx.p1, relCtx.p2)))
+
+    val substitutedThis = inv.transform {
+      case l: SIFLowExp =>
+        val exp = (translateNormal(l.exp, relCtx.p1, relCtx.p2), translatePrime(l.exp, relCtx.p1, relCtx.p2))
+        val newLowExp: (Exp, Exp, Exp, Exp) => Exp = (e11, e12, e21, e22) => And(
+          Implies(relCtx.p1, EqCmp(e11, e12)(inv.pos, inv.info, inv.errT))(inv.pos, inv.info, inv.errT),
+          Implies(relCtx.p2, EqCmp(e21, e22)(inv.pos, inv.info, inv.errT))(inv.pos, inv.info, inv.errT)
+        )(inv.pos, inv.info, inv.errT)
+
+        if(thisExp.isEmpty)
+          newLowExp(exp._1, exp._2, exp._1, exp._2)
+        else
+          newLowExp(exp._1.replace(thisExp.get._1, x._1), exp._2.replace(thisExp.get._2, x._1),
+            exp._1.replace(thisExp.get._1, x._2), exp._2.replace(thisExp.get._2, x._2))
+
+      case e : Exp if isUnary(e) =>
+        val exp = (translateNormal(e, relCtx.p1, relCtx.p2), translatePrime(e, relCtx.p1, relCtx.p2))
+        val newUnaryExp: (Exp, Exp, Exp, Exp) => Exp = (a11, a12, a21, a22) => And(
+          Implies(relCtx.p1, And(a11, a12)(inv.pos, inv.info, inv.errT))(inv.pos, inv.info, inv.errT),
+          Implies(relCtx.p2, And(a21, a22)(inv.pos, inv.info, inv.errT))(inv.pos, inv.info, inv.errT)
+        )(inv.pos, inv.info, inv.errT)
+
+        if(thisExp.isEmpty)
+          newUnaryExp(exp._1, exp._2, exp._1, exp._2)
+        else
+          newUnaryExp(exp._1.replace(thisExp.get._1, x._1), exp._2.replace(thisExp.get._2, x._1),
+          exp._1.replace(thisExp.get._1, x._2), exp._2.replace(thisExp.get._2, x._2))
+    }
+
+    def findPrimedField(replField: Field): Field = newFields.find(field => field.name == primedNames(replField.name)).get
+
+    substitutedThis.transform{
+      case FieldAccess(x._1, newField) if repl.exists {
+        case (f, _, _) => newField == f
+      } =>
+        // x_1.f1
+        translateNormal(repl.find(_._1 == newField).get._2, relCtx.p1, relCtx.p2)
+      case FieldAccess(x._1, newField) if repl.exists {
+        case (f, _, _) => findPrimedField(f) == newField
+      } =>
+        //x_1.f2
+        translateNormal(repl.find(tup => findPrimedField(tup._1) == newField).get._3, relCtx.p1, relCtx.p2)
+      case FieldAccess(x._2, newField) if repl.exists {
+        case (f, _, _) => newField == f
+      } =>
+        // x_2.f1
+        translatePrime(repl.find(_._1 == newField).get._3, relCtx.p1, relCtx.p2)
+      case FieldAccess(x._2, newField) if repl.exists {
+        case (f, _, _) => findPrimedField(f) == newField
+      } =>
+        //x_2.f2
+        translatePrime(repl.find(tup => findPrimedField(tup._1) == newField).get._2, relCtx.p1, relCtx.p2)
     }
   }
 
