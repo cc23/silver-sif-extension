@@ -8,7 +8,7 @@ package viper.silver.sif
 
 
 import viper.silver.ast._
-import viper.silver.ast.pretty.FastPrettyPrinter.{ContOps, nil, parens, show, showBlock, text}
+import viper.silver.ast.pretty.FastPrettyPrinter.{ContOps, lsep, nil, parens, show, showBlock, text}
 import viper.silver.ast.pretty.PrettyPrintPrimitives
 import viper.silver.verifier.{ConsistencyError, Failure, VerificationResult}
 
@@ -216,15 +216,16 @@ case class SIFTerminatesExp(cond: Exp)(val pos: Position = NoPosition,
 
   override def extensionIsPure: Boolean = cond.isPure
 }
-
 case class SIFSplitInvariant(inv: Exp,
                              receiver: Exp,
-                             repl: Seq[(Field, Exp, Exp)]
+                             replFields: Seq[Field],
+                             replNewVars: Seq[Exp],
+                             replOldVars: Seq[Exp],
                             )(val pos: Position = NoPosition,
                               val info: Info = NoInfo,
                               val errT: ErrorTrafo = NoTrafos) extends ExtensionExp {
   override def extensionSubnodes: Seq[Node] =
-    Seq(inv, receiver) ++ repl.flatMap(t => Seq(t._1, t._2, t._3))
+    Seq(inv, receiver) ++ replFields ++ replNewVars ++ replOldVars
 
   override def typ: Type = Bool
 
@@ -234,7 +235,11 @@ case class SIFSplitInvariant(inv: Exp,
   }
 
   override def prettyPrint: PrettyPrintPrimitives#Cont =
-    text("splitInv") <+> parens(show(inv)) <+> parens(show(receiver) <+> text(", somerepl") )
+    text("splitInv") <+> parens(show(inv)) <+> parens(show(receiver)) <+> parens(
+      lsep(replFields.lazyZip(replNewVars).lazyZip(replOldVars)
+        .map((f, fNew, fOld) => parens(show(f) <+> text(", ") <+> show(fNew) <+> text(", ") <+> show(fOld))),
+        text(", ")))
+
 
   override def extensionIsPure: Boolean = inv.isPure
 }

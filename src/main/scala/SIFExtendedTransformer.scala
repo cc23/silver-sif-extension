@@ -1397,7 +1397,8 @@ trait SIFExtendedTransformer {
               )(l.pos, l.info, errT = fwTs(l, l))
             }
         }
-      case s @ SIFSplitInvariant(inv, rec, repl) => translateSplitInv(inv, rec, repl, ctx, relAssertCtx)
+      case s @ SIFSplitInvariant(inv, rec, replFields, replNewVars, replOldVars) =>
+        translateSplitInv(inv, rec, replFields.lazyZip(replNewVars).lazyZip(replOldVars).toSeq, ctx, relAssertCtx)
 
       // for the domain method low, used e.g. for list resource
       case f@DomainFuncApp("Low", args, _) => translateSIFAss(
