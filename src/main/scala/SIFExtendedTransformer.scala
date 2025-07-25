@@ -1331,6 +1331,9 @@ trait SIFExtendedTransformer {
 
     e match {
       case And(e1, e2) => And(translateSIFAss(e1, ctx, relAssertCtx), translateSIFAss(e2, ctx, relAssertCtx))(e.pos, e.info, errT = fwTs(e, e))
+      case Implies(Not(exp), s@SIFSplitInvariant(_, _, _, _, _)) =>
+        Implies(Not(translateSIFAss(exp, ctx, relAssertCtx))(e.pos, e.info, e.errT),
+          translateSIFAss(s, ctx, relAssertCtx))(e.pos, e.info, e.errT)
       case i@Implies(e1, e2) if !isUnary(i) => {
         Implies(translateSIFAss(e1, ctx, relAssertCtx), translateSIFAss(e2, ctx, relAssertCtx))(e.pos, e.info, errT = fwTs(e, e))
       }
